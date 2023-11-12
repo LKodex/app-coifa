@@ -1,6 +1,6 @@
 # app-coifa
 
-A monorepo university work project of class "Advanced Technics of Software Development" (original pt_BR: Técnicas Avançadas de Desenvolvimento de Software) 
+A monorepo university work project of class "Advanced Techniques of Software Development" (original pt_BR: Técnicas Avançadas de Desenvolvimento de Software) 
 
 ## Application Architecture
 
