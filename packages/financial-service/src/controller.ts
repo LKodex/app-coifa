@@ -152,7 +152,7 @@ async function postTransferenceVerification(req: Request, res: Response) {
         });
     }
     // Verify if the transference is pending
-    const isDepositStatusPending = deposit.status == TransferenceStatus.PENDING;
+    const isDepositStatusPending = deposit!.status == TransferenceStatus.PENDING;
     if (!isDepositStatusPending) {
         return res.status(403).json({
             error: "This transferece already was verified",
