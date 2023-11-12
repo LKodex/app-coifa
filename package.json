@@ -1,0 +1,12 @@
+{
+  "name": "app-coifa",
+  "version": "1.0.0",
+  "description": "App monorepo HTTP/REST utilizando NodeJS e JavaScript",
+  "repository": "https://github.com/LKodex/app-coifa",
+  "author": "Kodex (Lucas G. Cordeiro <lucas.g.cordeiro@ufms.br>)",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}
