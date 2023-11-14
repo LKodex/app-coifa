@@ -51,8 +51,8 @@ const options: OAS3Options = {
                             format: "date-time",
                         },
                         type: {
-                            type: "enum",
-                            format: [ "CREDIT", "DEBIT" ],
+                            type: "string",
+                            enum: [ "CREDIT", "DEBIT" ],
                         },
                     },
                 },
@@ -102,8 +102,8 @@ const options: OAS3Options = {
                             ],
                         },
                         type: {
-                            type: "enum",
-                            format: [ "CREDIT", "DEBIT" ],
+                            type: "string",
+                            enum: [ "CREDIT", "DEBIT" ],
                         },
                     },
                 },

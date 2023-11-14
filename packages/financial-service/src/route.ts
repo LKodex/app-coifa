@@ -210,9 +210,9 @@ router.post(
  *       400:
  *         description: Either invalid user_id, pageSize, pageNumber or orderBy
  *         content:
- *           application/json
+ *           application/json:
  *             schema:
- *               $ref: '#components/schemas/ValidationError'
+ *               $ref: '#/components/schemas/ValidationError'
  */
 router.get(
     "/history/:user_id",
