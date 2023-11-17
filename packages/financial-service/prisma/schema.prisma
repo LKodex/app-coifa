@@ -10,6 +10,12 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
+enum TransferenceKind {
+    CREDIT
+    DEBIT
+    PURCHASE
+}
+
 enum TransferenceStatus {
     ACCEPTED
     PENDING
@@ -17,18 +23,21 @@ enum TransferenceStatus {
 }
 
 model Transference {
-    id                  String              @id @db.Uuid @default(uuid()) 
-    user_id             String              @db.Uuid
-    amount              Int
+    id                  String              @id @default(uuid()) @db.Uuid
+    sender_id           String              @db.Uuid
+    recipient_id        String?             @db.Uuid
+    amount              Int                 
     date                DateTime            @default(now())
-    credit              Credit?
+    kind                TransferenceKind
+    description         String?
+    review              Review?
 }
 
-model Credit {
+model Review {
     transference_id     String              @id @db.Uuid
     transference        Transference        @relation(fields: [transference_id], references: [id])
     reviewer_id         String?             @db.Uuid
     reviewed_date       DateTime            @updatedAt
-    receipt             String
+    receipt             String              
     status              TransferenceStatus  @default(PENDING)
 }
