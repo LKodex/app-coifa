@@ -141,7 +141,7 @@ const options: OAS3Options = {
         },
     },
     apis: [
-        "./src/route.copy.ts",
+        "./src/route.ts",
     ],
 };
 
