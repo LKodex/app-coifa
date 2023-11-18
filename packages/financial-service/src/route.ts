@@ -733,6 +733,8 @@ router.post(
  * @openapi
  * /debit/{user_id}:
  *   post:
+ *     tags:
+ *       - transference
  *     summary: Post a debit for the user account
  *     description: Post a debit transference for the user account
  *     operationId: postDebit
