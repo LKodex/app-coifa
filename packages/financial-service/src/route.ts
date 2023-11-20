@@ -10,7 +10,7 @@ const upload = multer({ dest: uploadsDirectory });
 const router: Router = express.Router();
 
 function setBodyFieldAsMulterFilePath(field: string): any {
-    return (req: Request, res: Response, next: NextFunction) => {
+    return (req: Request, _: Response, next: NextFunction) => {
         req.body[field] = req.file?.path;
         next();
     };
@@ -60,7 +60,10 @@ function validate (schema: Schema) {
  *                 balance:
  *                   type: integer
  *                   format: int53
- *                 pending:
+ *                 treasury:
+ *                   type: integer
+ *                   format: int53
+ *                 pending_balance:
  *                   type: integer
  *                   format: int53
  *       400:
@@ -87,10 +90,9 @@ router.get(
  * /balance/{user_id}:
  *   post:
  *     tags:
- *       - balance
+ *       - transference
  *     summary: Place a deposit / creates a credit transference
- *     description: Create a credit transference for the user. It must be reviewed
- *       to be credited to the user
+ *     description: Create a credit transference from sender to recipient. It must be reviewed
  *     operationId: postUserDeposit
  *     parameters:
  *       - name: user_id
@@ -107,7 +109,10 @@ router.get(
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [ amount, receipt ]
+ *             required:
+ *               - amount
+ *               - receipt
+ *               - recipient_id
  *             properties:
  *               amount:
  *                 type: integer
@@ -115,26 +120,41 @@ router.get(
  *               receipt:
  *                 type: string
  *                 format: binary
+ *               recipient_id:
+ *                 type: string
+ *                 format: uuid
+ *               description:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Returns the newly placed deposit
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/DepositDTO'
+ *               $ref: '#/components/schemas/ReviewedTransferenceDTO'
  *       400:
- *         description: Either invalid user_id, not integer amount or receipt
- *           file not sent
+ *         description: Some validation failed, check the response body
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/ValidationError'
+ *                 - $ref: '#/components/schemas/ErrorResponse'
  */
 router.post(
-    "/balance/:user_id",
+    "/balance/:recipient_id",
     upload.single("receipt"),
     setBodyFieldAsMulterFilePath("receipt"),
     validate({
-        user_id: {
+        sender_id: {
             isUUID: true,
             in: "params",
             errorMessage: "user_id must be a valid UUID",
+        },
+        recipient_id: {
+            isUUID: true,
+            in: "body",
+            errorMessage: "recipient_id must be a valid UUID",
         },
         amount: {
             toInt: true,
@@ -147,8 +167,14 @@ router.post(
             errorMessage: "amount must be a positive integer number",
         },
         receipt: {
+            in: "body",
             exists: true,
             errorMessage: "receipt file is required",
+        },
+        description: {
+            in: "body",
+            optional: true,
+            isString: true,
         },
     }),
     controller.postUserDeposit,
@@ -156,49 +182,43 @@ router.post(
 
 /**
  * @openapi
- * /history/{user_id}:
+ * /purchase:
  *   get:
  *     tags:
  *       - history
- *     summary: Get user transference history
- *     description: Returns the transference history. By default it returns the
- *       first page with the last 50 transferences.
- *     operationId: getUserTransferenceHistory
+ *     summary: Gets the list of verified purchases
+ *     description: Gets the list of verified purchases
+ *     operationId: getVerifiedPurchases
  *     parameters:
- *       - name: user_id
- *         in: path
- *         required: true
- *         description: UUID of the user to be fetched the history
- *         schema:
- *           type: string
- *           format: uuid
  *       - name: pageNumber
  *         in: query
  *         required: false
- *         description: The page number of history
+ *         description: page index
  *         schema:
  *           type: integer
  *           format: int53
+ *           default: 1
  *       - name: pageSize
  *         in: query
  *         required: false
- *         description: The total quantity of transferences per page
+ *         description: elements per page
  *         schema:
  *           type: integer
- *           format: int8
+ *           format: int53
  *           default: 50
- *       - name: orderBy
+ *       - name: orderDateBy
  *         in: query
  *         required: false
- *         description: If the history must be sorted by the most recent or most old
+ *         description: if the elements should be ordered ascending or descending by the date
  *         schema:
  *           type: string
- *           enum: [ asc, desc ]
+ *           enum:
+ *             - asc
+ *             - desc
  *           default: desc
  *     responses:
  *       200:
- *         description: Returns the history of the specified user even if it's
- *           empty
+ *         description: description
  *         content:
  *           application/json:
  *             schema:
@@ -206,13 +226,176 @@ router.post(
  *               items:
  *                 anyOf:
  *                   - $ref: '#/components/schemas/TransferenceDTO'
- *                   - $ref: '#/components/schemas/DepositDTO'
+ *                   - $ref: '#/components/schemas/ReviewedTransferenceDTO'
+ */
+router.get(
+    "/purchase",
+    validate({
+        pageNumber: {
+            optional: true,
+            in: "query",
+            default: { options: 1 },
+            isInt: {
+                options: {
+                    min: 1,
+                },
+            },
+            toInt: true,
+            errorMessage: "pageNumber must be a positive integer",
+        },
+        pageSize: {
+            optional: true,
+            in: "query",
+            default: { options: 50 },
+            isInt: {
+                options: {
+                    min: 1,
+                    max: 255,
+                },
+            },
+            toInt: true,
+            errorMessage: "pageSize must be a positive 8 bits integer",
+        },
+        orderDateBy: {
+            optional: true,
+            in: "query",
+            default: { options: "desc" },
+            isIn: { options: [["asc", "desc"]] },
+            errorMessage: "orderBy must be etiher asc or desc",
+        },
+    }),
+    controller.getVerifiedPurchases,
+);
+
+/**
+ * @openapi
+ * /purchase:
+ *   post:
+ *     tags:
+ *       - transference
+ *     summary: Post a purchase
+ *     description: Post a purchase
+ *     operationId: postUserPurchase
+ *     requestBody:
+ *       description: description
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sender_id
+ *               - amount
+ *               - receipt
+ *             properties:
+ *               sender_id:
+ *                 type: string
+ *                 format: uuid
+ *               amount:
+ *                 type: integer
+ *                 format: int53
+ *               receipt:
+ *                 type: string
+ *                 format: binary
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: The posted purchase
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ReviewedTransferenceDTO'
  *       400:
- *         description: Either invalid user_id, pageSize, pageNumber or orderBy
+ *         description: Validation error
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ValidationError'
+ */
+router.post(
+    "/purchase",
+    upload.single("receipt"),
+    validate({
+        sender_id: {
+            isUUID: true,
+            in: "body",
+        },
+        amount: {
+            toInt: true,
+            isInt: {
+                options: {
+                    min: 1,
+                },
+            },
+            in: "body",
+            errorMessage: "amount must be a positive integer number",
+        },
+        receipt: {
+            in: "body",
+            exists: true,
+            errorMessage: "receipt file is required",
+        },
+        description: {
+            in: "body",
+            optional: true,
+            isString: true,
+        },
+    }),
+    controller.postUserPurchase,
+);
+
+
+/**
+ * @openapi
+ * /history/{user_id}:
+ *   get:
+ *     tags:
+ *       - history
+ *     summary: Gets the user transference history
+ *     description: Gets the user transference history 
+ *     operationId: getUserTransferenceHistory
+ *     parameters:
+ *       - name: user_id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - name: pageNumber
+ *         in: query
+ *         required: false
+ *         description: page index
+ *         schema:
+ *           type: integer
+ *           format: int53
+ *           default: 1
+ *       - name: pageSize
+ *         in: query
+ *         required: false
+ *         description: elements per page
+ *         schema:
+ *           type: integer
+ *           format: int53
+ *           default: 50
+ *       - name: orderDateBy
+ *         in: query
+ *         required: false
+ *         description: if the elements should be ordered ascending or descending by the date
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - asc
+ *             - desc
+ *           default: desc
+ *     responses:
+ *       200:
+ *         description: description
+ *         content:
+ *           application/json:
+ *             schema:
+ *               anyOf:
+ *                 - $ref: '#/components/schemas/TransferenceDTO'
+ *                 - $ref: '#/components/schemas/ReviewedTransferenceDTO'
  */
 router.get(
     "/history/:user_id",
@@ -247,7 +430,7 @@ router.get(
             toInt: true,
             errorMessage: "pageSize must be a positive 8 bits integer",
         },
-        orderBy: {
+        orderDateBy: {
             optional: true,
             in: "query",
             default: { options: "desc" },
@@ -260,66 +443,145 @@ router.get(
 
 /**
  * @openapi
- * /history/{user_id}/transference/{transference_id}:
+ * /transference/{transference_id}:
  *   get:
  *     tags:
  *       - history
- *     summary: Get a specific transference from history
- *     description: Checks if have permission to fetch from the specified user
- *       history and return the specified transference
- *     operationId: getUserSpecificTransferece
+ *     summary: Gets a transference
+ *     description: Gets a transference
+ *     operationId: getTransference
  *     parameters:
- *       - name: user_id
- *         in: path
- *         description: UUID of the user to be fetched the history
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
  *       - name: transference_id
  *         in: path
- *         description: UUID of the transference to be fetched from user history
  *         required: true
  *         schema:
  *           type: string
  *           format: uuid
  *     responses:
  *       200:
- *         description: Returns the transference of specified transference_id
+ *         description: The transference (or reviewed transference)
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
+ *               anyOf:
  *                 - $ref: '#/components/schemas/TransferenceDTO'
- *                 - $ref: '#/components/schemas/DepositDTO'
+ *                 - $ref: '#/components/schemas/ReviewedTransferenceDTO'
  *       400:
- *         description: Invalid transference_id, it must be a valid UUID
+ *         description: Validation error
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ValidationError'
+ *               $ref: '#/components/schemas/ValidationError'               
  *       404:
- *         description: There's no transference with the specified transference_id
+ *         description: Transference not found
  *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *            application/json:
+ *              schema:
+ *                $ref: '#/components/schemas/ErrorResponse'
+ *                
  */
 router.get(
-    "/history/:user_id/transference/:transference_id",
+    "/transference/:transference_id",
     validate({
-        user_id: {
-            isUUID: true,
-            in: "params",
-            errorMessage: "user_id must be a valid UUID",
-        },
         transference_id: {
             isUUID: true,
             in: "params",
             errorMessage: "transference_id must be a valid UUID",
         },
     }),
-    controller.getUserSpecificTransference,
+    controller.getTransference,
+);
+
+/**
+ * @openapi
+ * /verify:
+ *   get:
+ *     tags:
+ *       - history
+ *       - review
+ *     summary: Gets the list of transferences not yet verified
+ *     description: Gets the list of transferences not yet verified
+ *     operationId: getPendingTransferences
+ *     parameters:
+ *       - name: pageNumber
+ *         in: query
+ *         required: false
+ *         description: page index
+ *         schema:
+ *           type: integer
+ *           format: int53
+ *           default: 1
+ *       - name: pageSize
+ *         in: query
+ *         required: false
+ *         description: elements per page
+ *         schema:
+ *           type: integer
+ *           format: int53
+ *           default: 50
+ *       - name: orderDateBy
+ *         in: query
+ *         required: false
+ *         description: if the elements should be ordered ascending or descending by the date
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - asc
+ *             - desc
+ *           default: desc
+ *     responses:
+ *       200:
+ *         description: The list of pending transferences
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/ReviewedTransferenceDTO'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ValidationError'    
+ */
+router.get(
+    "/verify",
+    validate({
+        pageNumber: {
+            optional: true,
+            in: "query",
+            default: { options: 1 },
+            isInt: {
+                options: {
+                    min: 1,
+                },
+            },
+            toInt: true,
+            errorMessage: "pageNumber must be a positive integer",
+        },
+        pageSize: {
+            optional: true,
+            in: "query",
+            default: { options: 50 },
+            isInt: {
+                options: {
+                    min: 1,
+                    max: 255,
+                },
+            },
+            toInt: true,
+            errorMessage: "pageSize must be a positive 8 bits integer",
+        },
+        orderDateBy: {
+            optional: true,
+            in: "query",
+            default: { options: "desc" },
+            isIn: { options: [["asc", "desc"]] },
+            errorMessage: "orderBy must be etiher asc or desc",
+        },
+    }),
+    controller.getPendingTransferences,
 );
 
 /**
@@ -328,43 +590,35 @@ router.get(
  *   get:
  *     tags:
  *       - review
- *     summary: Gets a transference not yet reviewed
- *     description: Gets a credit transference not yet reviewed. If the credit
- *       transference already was reviewed it's returned an error
+ *     summary: Gets a transference not yet verified
+ *     description: Gets the transference with specified id if it has not been verified yet
  *     operationId: getUnverifiedTransference
  *     parameters:
  *       - name: transference_id
  *         in: path
- *         description: UUID of the credit transference 
  *         required: true
  *         schema:
  *           type: string
  *           format: uuid
  *     responses:
  *       200:
- *         description: Returns the verified transference
+ *         description: Transference not yet verified
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/DepositDTO'
+ *               $ref: '#/components/schemas/ReviewedTransferenceDTO'
  *       400:
- *         description: Invalid transference_id, it must be a valid UUID
+ *         description: Validation error
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ValidationError'
- *       403:
- *         description: The credit transference already was verified
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *               $ref: '#/components/schemas/ValidationError'               
  *       404:
- *         description: There's no transference with the specified transference_id
+ *         description: Transference not found
  *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *            application/json:
+ *              schema:
+ *                $ref: '#/components/schemas/ErrorResponse'
  */
 router.get(
     "/verify/:transference_id",
@@ -384,59 +638,60 @@ router.get(
  *   post:
  *     tags:
  *       - review
- *     summary: Verify a placed deposit
- *     description: Verify a placed deposit by either accepting or rejecting
- *     operationId: postTransferenceVerification
+ *     summary: Verify a pending transference
+ *     description: Verify a pending transference (ACCEPT or REJECT). You must provide the amount saw on the receipt. You can't verify your own transference
  *     parameters:
  *       - name: transference_id
  *         in: path
- *         description: UUID of the credit transference
  *         required: true
  *         schema:
  *           type: string
  *           format: uuid
+ *     operationId: postTransferenceVerification
  *     requestBody:
- *       description: Required data to verify a deposit
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - amount
+ *               - action
+ *               - reviewer_id
  *             properties:
- *               action:
- *                 type: string
- *                 enum: [ACCEPT, REJECT]
  *               amount:
  *                 type: integer
  *                 format: int53
+ *               action:
+ *                 type: string
+ *                 enum:
+ *                   - ACCEPT
+ *                   - REJECT
  *               reviewer_id:
  *                 type: string
  *                 format: uuid
  *     responses:
  *       200:
- *         description: Returns the verified transference
+ *         description: The transference reviewed
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/DepositDTO'
+ *               $ref: '#/components/schemas/ReviewedTransferenceDTO'
  *       400:
- *         description: Either invalid transference_id, invalid action or invalid amount.
- *           Also the amount can be a distinct from the one declared or the transference
- *           may have already been verified
+ *         description: Validation error or can't perform the operation
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
+ *               anyOf:
  *                 - $ref: '#/components/schemas/ValidationError'
  *                 - $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The user isn't allowed to see transferences that isn't
- *           pending
+ *         description: Transference already has been verified
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: There's no transference with the specified transference_id
+ *         description: Pending transference not found
  *         content:
  *           application/json:
  *             schema:
@@ -451,10 +706,14 @@ router.post(
             errorMessage: "transference_id must be a valid UUID",
         },
         amount: {
-            isInt: true,
             toInt: true,
+            isInt: {
+                options: {
+                    min: 1,
+                },
+            },
             in: "body",
-            errorMessage: "amount must be a integer",
+            errorMessage: "amount must be a positive integer number",
         },
         action: {
             isIn: { options: [["ACCEPT", "REJECT"]] },
@@ -468,6 +727,77 @@ router.post(
         },
     }),
     controller.postTransferenceVerification,
+);
+
+/**
+ * @openapi
+ * /debit/{user_id}:
+ *   post:
+ *     tags:
+ *       - transference
+ *     summary: Post a debit for the user account
+ *     description: Post a debit transference for the user account
+ *     operationId: postDebit
+ *     parameters:
+ *       - name: user_id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: integer
+ *                 format: int53
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Debit transference successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TransferenceDTO'
+ *       400:
+ *         description: Validation error or error response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/ValidationError'
+ *                 - $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post(
+    "/debit/:user_id",
+    validate({
+        user_id: {
+            isUUID: true,
+            in: "params",
+        },
+        amount: {
+            toInt: true,
+            isInt: {
+                options: {
+                    min: 1,
+                },
+            },
+            in: "body",
+            errorMessage: "amount must be a positive integer number",
+        },
+        description: {
+            in: "body",
+            optional: true,
+            isString: true,
+        },
+    }),
+    controller.postDebit
 );
 
 export { router };

@@ -1,160 +1,240 @@
-import { Credit, Transference, TransferenceStatus } from "@prisma/client";
+import { Review, Transference, TransferenceKind, TransferenceStatus } from "@prisma/client";
 import { Context } from "./context";
-import { ReviewAction } from "./types";
 
 interface IBalance {
     balance: number,
-    pending: number,
+    treasury: number,
+    pending_balance: number,
 }
 
-async function getUserBalance(context: Context, id: string): Promise<IBalance> {
-    const transferenceHistory = await context.prisma.transference.findMany({
-        where: { id },
-        include: { credit: true },
+interface ITransferenceWithReview extends Transference {
+    review: Review | null,
+}
+
+async function getUserBalance(context: Context, user_id: string): Promise<IBalance> {
+    const result = await context.prisma.transference.findMany({
+        where: {
+            sender_id: user_id,
+            OR: [{
+                review: null,
+            }, {
+                review: {
+                    NOT: [{
+                        status: TransferenceStatus.REJECTED,
+                    }],
+                },
+            }],
+        },
+        include: { review: true },
     });
-    const balance = transferenceHistory.reduce((acc: IBalance, transference) => {
-        const isCreditTransference = Boolean(transference.credit);
-        if (!isCreditTransference) {
-            acc.balance -= transference.amount;
-            return acc;
-        }
-        const creditTransferenceStatus = transference.credit!.status;
-        switch (creditTransferenceStatus) {
-        case TransferenceStatus.PENDING:
-            acc.pending += transference.amount;
+
+    const balance = result.reduce((balance: IBalance, transference): any => {
+        switch (transference.kind) {
+        case TransferenceKind.PURCHASE: {
+            const isPurchaseAccepted = transference.review?.status == TransferenceStatus.ACCEPTED;
+            if (isPurchaseAccepted) {
+                balance.treasury -= transference.amount;
+            }
             break;
-        case TransferenceStatus.ACCEPTED:
-            acc.balance += transference.amount;
         }
-        return acc;
+        case TransferenceKind.DEBIT: 
+            balance.balance -= transference.amount;
+            break;
+        case TransferenceKind.CREDIT: {
+            const isCreditRejected = transference.review?.status == TransferenceStatus.REJECTED;
+            if (isCreditRejected) {
+                break;
+            }
+            const isCreditPending = transference.review?.status == TransferenceStatus.PENDING;
+            if (isCreditPending) {
+                balance.pending_balance += transference.amount;
+                break;
+            }
+            const isSender = transference.sender_id == user_id;
+            if (isSender) {
+                balance.balance += transference.amount;
+                break;
+            }
+            balance.treasury += transference.amount;
+            break;
+        }
+        }
+        return balance;
     },
     {
         balance: 0,
-        pending: 0,
+        treasury: 0,
+        pending_balance: 0,
     });
-    return balance;
+
+    const treasurySurplus = Math.abs(Math.min(0, balance.treasury));
+    return {
+        balance: balance.balance + treasurySurplus,
+        treasury: balance.treasury + treasurySurplus,
+        pending_balance: balance.pending_balance,
+    };
 }
 
-interface IDeposit {
-    amount: number,
-    user_id: string,
-    receipt: string,
-}
-
-async function placeDeposit(context: Context, deposit: IDeposit) {
-    const { user_id, amount, receipt } = deposit;
-    return context.prisma.credit.create({
-        data: {
-            receipt,
-            transference: {
-                create: {
-                    user_id,
-                    amount,
-                },
-            },
-        },
-        include: {
-            transference: true,
-        },
-    });
-}
-
-interface IReview {
-    transference_id: string,
-    reviewer_id: string,
-    amount: number,
-    action: ReviewAction,
-}
-
-interface ICreditTransference extends Credit {
-    transference: Transference,
-}
-
-async function reviewDeposit(context: Context, review: IReview): Promise<ICreditTransference | null> {
-    const {
-        transference_id,
-        reviewer_id,
-        action,
-        amount,
-    } = review;
-    const status = action == "ACCEPT" ? TransferenceStatus.ACCEPTED : TransferenceStatus.REJECTED;
-    return context.prisma.credit.update({
-        where: {
-            transference_id,
-            status: TransferenceStatus.PENDING,
-            transference: {
-                amount: {
-                    equals: amount,
-                },
-            },
-        },
-        data: {
-            reviewer_id,
-            status,
-        },
-        include: {
-            transference: true,
-        },
-    })
-        .catch((_recordNotFound) => null);
-}
-
-async function getDeposit(context: Context, transference_id: string): Promise<ICreditTransference | null> {
-    return context.prisma.credit.findUnique({
-        where: { transference_id },
-        include: { transference: true },
-    });
-}
-
-async function getTransference(context: Context, id: string): Promise<Transference | null> {
-    return context.prisma.transference.findUnique({
-        where: { id },
-        include: { credit: true },
-    });
-}
-
-interface ITransferenceWithCredit extends Transference {
-    credit: Credit | null,
-}
-
-async function getTransferenceFromUser(
+async function getPurchaseHistory(
     context: Context,
-    id: string,
-    user_id: string,
-): Promise<ITransferenceWithCredit | null> {
-    return context.prisma.transference.findUnique({
-        where: {
-            id,
-            user_id,
+    pageNumber: number = 1,
+    pageSize: number = 50,
+    orderDateBy: "asc" | "desc" = "desc",
+): Promise<ITransferenceWithReview[]> {
+    return context.prisma.transference.findMany({
+        take: pageSize,
+        skip: pageSize * (pageNumber - 1),
+        where: { kind: TransferenceKind.PURCHASE },
+        include: { review: true },
+        orderBy: {
+            date: orderDateBy,
         },
-        include: { credit: true },
     });
 }
 
-async function getHistory(
+// Debit
+async function postTransference(
+    context: Context,
+    amount: number,
+    sender_id: string,
+    description: string,
+): Promise<Transference> {
+    return context.prisma.transference.create({
+        data: {
+            amount,
+            sender_id,
+            description,
+            kind: TransferenceKind.DEBIT,
+        },
+    });
+}
+
+// Credit / Purchase
+async function postPendingTransference(
+    context: Context,
+    amount: number,
+    sender_id: string,
+    receipt: string,
+    recipient_id: string | null = null,
+    description: string | null = null,
+    kind: TransferenceKind,
+): Promise<ITransferenceWithReview> {
+    return context.prisma.transference.create({
+        data: {
+            amount,
+            sender_id,
+            recipient_id,
+            kind,
+            description,
+            review: {
+                create: {
+                    receipt,
+                },
+            },
+        },
+        include: {
+            review: true,
+        },
+    });
+}
+
+async function getUserHistory(
     context: Context,
     user_id: string,
     pageNumber: number = 1,
     pageSize: number = 50,
-    orderBy: "asc" | "desc" = "desc",
-): Promise<ITransferenceWithCredit[]> {
+    orderDateBy: "asc" | "desc" = "desc",
+): Promise<ITransferenceWithReview[]> {
     return context.prisma.transference.findMany({
         take: pageSize,
         skip: pageSize * (pageNumber - 1),
-        where: { user_id },
-        include: { credit: true },
+        where: { sender_id: user_id },
+        include: { review: true },
         orderBy: {
-            date: orderBy,
+            date: orderDateBy,
+        },
+    });
+}
+
+async function getTransference(
+    context: Context,
+    id: string,
+): Promise<ITransferenceWithReview | null> {
+    return context.prisma.transference.findUnique({
+        where: { id },
+        include: { review: true },
+    });
+}
+
+async function postTransferenceReview(
+    context: Context,
+    amount: number,
+    action: string,
+    transference_id: string,
+    reviewer_id: string,
+) /*: Promise<ITransferenceWithReview | null> */ {
+    const status = action == "ACCEPT" ? TransferenceStatus.ACCEPTED : TransferenceStatus.REJECTED;
+    return context.prisma.transference.update({
+        where: {
+            id: transference_id,
+            amount: {
+                equals: amount,
+            },
+            review: {
+                status: TransferenceStatus.PENDING,
+            },
+        },
+        data: {
+            review: {
+                update: {
+                    where: {
+                        transference_id,
+                    },
+                    data: {
+                        reviewer_id,
+                        status,
+                    },
+                },
+            },
+        },
+        include: {
+            review: true,
+        },
+    })
+        .catch((_recordNotFound: any) => null);
+}
+
+async function getTransferencesWithStatus(
+    context: Context,
+    status: TransferenceStatus,
+    pageNumber: number = 1,
+    pageSize: number = 50,
+    orderDateBy: "asc" | "desc" = "desc",
+): Promise<ITransferenceWithReview[]> {
+    return context.prisma.transference.findMany({
+        take: pageSize,
+        skip: pageSize * (pageNumber - 1),
+        where: {
+            review: {
+                status,
+            },
+        },
+        include: {
+            review: true,
+        },
+        orderBy: {
+            date: orderDateBy,
         },
     });
 }
 
 export = {
+    getPurchaseHistory,
     getUserBalance,
-    placeDeposit,
-    reviewDeposit,
-    getDeposit,
+    getUserHistory,
     getTransference,
-    getTransferenceFromUser,
-    getHistory,
+    getTransferencesWithStatus,
+    postPendingTransference,
+    postTransference,
+    postTransferenceReview,
 };

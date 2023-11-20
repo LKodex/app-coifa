@@ -15,12 +15,16 @@ const options: OAS3Options = {
                 description: "See balance and place transfers",
             },
             {
+                name: "transference",
+                description: "Post realized transferences",
+            },
+            {
                 name: "history",
-                description: "See transfer history",
+                description: "See transferences history",
             },
             {
                 name: "review",
-                description: "Verify placed transfers",
+                description: "Verify and review placed transferences",
             },
         ],
         components: {
@@ -29,16 +33,21 @@ const options: OAS3Options = {
                     type: "object",
                     required: [
                         "id",
-                        "user_id",
+                        "sender_id",
                         "amount",
                         "date",
+                        "kind",
                     ],
                     properties: {
                         id: {
                             type: "string",
                             format: "uuid",
                         },
-                        user_id: {
+                        sender_id: {
+                            type: "string",
+                            format: "uuid",
+                        },
+                        recipient_id: {
                             type: "string",
                             format: "uuid",
                         },
@@ -50,37 +59,24 @@ const options: OAS3Options = {
                             type: "string",
                             format: "date-time",
                         },
-                        type: {
+                        kind: {
                             type: "string",
-                            enum: [ "CREDIT", "DEBIT" ],
+                            enum: [ "CREDIT", "DEBIT", "PURCHASE" ],
+                        },
+                        description: {
+                            type: "string",
                         },
                     },
                 },
-                DepositDTO: {
+                ReviewDTO: {
                     type: "object",
                     required: [
-                        "id",
-                        "user_id",
-                        "date",
                         "receipt",
                         "status",
                     ],
                     properties: {
-                        id: {
+                        receipt: {
                             type: "string",
-                            format: "uuid",
-                        },
-                        user_id: {
-                            type: "string",
-                            format: "uuid",
-                        },
-                        amount: {
-                            type: "integer",
-                            format: "int53",
-                        },
-                        date: {
-                            type: "string",
-                            format: "date-time",
                         },
                         reviewed_date: {
                             type: "string",
@@ -90,9 +86,6 @@ const options: OAS3Options = {
                             type: "string",
                             format: "uuid",
                         },
-                        receipt: {
-                            type: "string",
-                        },
                         status: {
                             type: "string",
                             enum: [
@@ -101,11 +94,13 @@ const options: OAS3Options = {
                                 "REJECTED",
                             ],
                         },
-                        type: {
-                            type: "string",
-                            enum: [ "CREDIT", "DEBIT" ],
-                        },
                     },
+                },
+                ReviewedTransferenceDTO: {
+                    allOf: [
+                        { $ref: "#/components/schemas/TransferenceDTO" },
+                        { $ref: "#/components/schemas/ReviewDTO" },
+                    ],
                 },
                 ErrorResponse: {
                     type: "object",

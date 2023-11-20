@@ -20,7 +20,7 @@ These variables may be set at `.env` file and can be taken from the example file
 
 Variable | Example | Default value
 :-: | :-: | :-:
-DATABASE_URL | "postgresql://user:root@host:port/dbname?schema=public" | -
+DATABASE_URL | "postgresql://user:password@host:port/dbname?schema=public" | -
 PORT | 80 | 8080
 
 ## Generating Swagger Documentation
