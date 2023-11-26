@@ -1,8 +1,8 @@
 import { NextFunction, Request, Response, Router } from "express";
-import { Schema, checkSchema, matchedData, validationResult } from "express-validator";
 import controller from "./controller";
 import express from "express";
 import multer from "multer";
+import { validateSchema } from "./middlewares/validate_schema";
 
 const uploadsDirectory = process.env.UPLOAD_DIRECTORY ?? "./uploads";
 const upload = multer({ dest: uploadsDirectory });
@@ -14,20 +14,6 @@ function setBodyFieldAsMulterFilePath(field: string): any {
         req.body[field] = req.file?.path;
         next();
     };
-}
-
-function validate (schema: Schema) {
-    return [
-        ...checkSchema(schema),
-        (req: Request, res: Response, next: NextFunction) => {
-            const result = validationResult(req);
-            if (result.isEmpty()) {
-                req.data = matchedData(req);
-                return next();
-            }
-            res.status(400).json(result.array());
-        },
-    ];
 }
 
 /**
@@ -75,7 +61,7 @@ function validate (schema: Schema) {
  */
 router.get(
     "/balance/:user_id",
-    validate({
+    validateSchema({
         user_id: {
             isUUID: true,
             in: "params",
@@ -145,7 +131,7 @@ router.post(
     "/balance/:recipient_id",
     upload.single("receipt"),
     setBodyFieldAsMulterFilePath("receipt"),
-    validate({
+    validateSchema({
         sender_id: {
             isUUID: true,
             in: "params",
@@ -230,7 +216,7 @@ router.post(
  */
 router.get(
     "/purchase",
-    validate({
+    validateSchema({
         pageNumber: {
             optional: true,
             in: "query",
@@ -315,7 +301,7 @@ router.get(
 router.post(
     "/purchase",
     upload.single("receipt"),
-    validate({
+    validateSchema({
         sender_id: {
             isUUID: true,
             in: "body",
@@ -399,7 +385,7 @@ router.post(
  */
 router.get(
     "/history/:user_id",
-    validate({
+    validateSchema({
         user_id: {
             isUUID: true,
             in: "params",
@@ -482,7 +468,7 @@ router.get(
  */
 router.get(
     "/transference/:transference_id",
-    validate({
+    validateSchema({
         transference_id: {
             isUUID: true,
             in: "params",
@@ -547,7 +533,7 @@ router.get(
  */
 router.get(
     "/verify",
-    validate({
+    validateSchema({
         pageNumber: {
             optional: true,
             in: "query",
@@ -622,7 +608,7 @@ router.get(
  */
 router.get(
     "/verify/:transference_id",
-    validate({
+    validateSchema({
         transference_id: {
             isUUID: true,
             in: "params",
@@ -699,7 +685,7 @@ router.get(
  */
 router.post(
     "/verify/:transference_id",
-    validate({
+    validateSchema({
         transference_id: {
             isUUID: true,
             in: "params",
@@ -776,7 +762,7 @@ router.post(
  */
 router.post(
     "/debit/:user_id",
-    validate({
+    validateSchema({
         user_id: {
             isUUID: true,
             in: "params",
