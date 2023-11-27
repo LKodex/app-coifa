@@ -28,6 +28,13 @@ const options: OAS3Options = {
             },
         ],
         components: {
+            securitySchemes: {
+                keycloak: {
+                    type: "http",
+                    scheme: "bearer",
+                    bearerFormat: "JWT",
+                },
+            },
             schemas: {
                 TransferenceDTO: {
                     type: "object",
