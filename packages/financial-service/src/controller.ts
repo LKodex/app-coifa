@@ -356,7 +356,7 @@ async function postDebit(req: Request, res: Response) {
         date,
         kind,
         description,
-    }
+    };
     res.status(201).json(debitDto);
 }
 
@@ -370,5 +370,5 @@ export = {
     getPendingTransferences,
     getUnverifiedTransference,
     postTransferenceVerification,
-    postDebit
+    postDebit,
 };

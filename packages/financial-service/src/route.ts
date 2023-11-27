@@ -783,7 +783,7 @@ router.post(
             isString: true,
         },
     }),
-    controller.postDebit
+    controller.postDebit,
 );
 
 export { router };
