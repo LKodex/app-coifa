@@ -3,6 +3,7 @@ import controller from "./controller";
 import express from "express";
 import multer from "multer";
 import { validateSchema } from "./middlewares/validate_schema";
+import { authentication } from "./middlewares/authentication";
 
 const uploadsDirectory = process.env.UPLOAD_DIRECTORY ?? "./uploads";
 const upload = multer({ dest: uploadsDirectory });
@@ -20,6 +21,8 @@ function setBodyFieldAsMulterFilePath(field: string): any {
  * @openapi
  * /balance/{user_id}:
  *   get:
+ *     security:
+ *       - keycloak: []
  *     tags:
  *       - balance
  *     summary: Gets user balance and pending values
@@ -61,6 +64,7 @@ function setBodyFieldAsMulterFilePath(field: string): any {
  */
 router.get(
     "/balance/:user_id",
+    authentication,
     validateSchema({
         user_id: {
             isUUID: true,

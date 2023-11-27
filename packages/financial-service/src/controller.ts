@@ -13,6 +13,19 @@ const context: Context = { prisma: new PrismaClient() };
 
 async function getUserBalance(req: Request, res: Response) {
     const { user_id } = req.data;
+    const { auth_id, email } = req.auth;
+
+    const ADMIN_DOMAIN = process.env.ADMIN_DOMAIN ?? "ufms.br";
+    const isUserAdmin = email.endsWith(`@${ADMIN_DOMAIN}`);
+    const isUserRequester = user_id == auth_id;
+    const isUserAllowed = isUserRequester || isUserAdmin;
+
+    if (!isUserAllowed) {
+        return res.status(403).json({
+            unauthorized: "you aren't allowed to see the balance of this user"
+        });
+    }
+
     const userBalance = await service.getUserBalance(context, user_id);
     res.status(200).json(userBalance);
 }

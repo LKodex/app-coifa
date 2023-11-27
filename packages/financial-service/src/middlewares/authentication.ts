@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
 const KC_HOST = process.env.KEYCLOAK_HOST;
-const KC_REALM = process.env.KEYCLOAK_REALM;
+const KC_REALM = process.env.KEYCLOAK_REALM ?? "facoffee";
 const KEYCLOAK_URL = `${KC_HOST}/realms/${KC_REALM}`;
 
 export async function authentication(req: Request, res: Response, next: NextFunction) {
@@ -11,7 +11,7 @@ export async function authentication(req: Request, res: Response, next: NextFunc
     if (!isBearerToken) {
         return res
             .status(401)
-            .json({ auth_error: "Must be provided an bearer JWT token" });
+            .json({ unauthenticated: "Must be provided an bearer JWT token" });
     }
     
     const decodedToken = jwt.decode(token!);
@@ -19,7 +19,7 @@ export async function authentication(req: Request, res: Response, next: NextFunc
     if (!isTokenDecoded) {
         return res
             .status(401)
-            .json({ auth_error: "Invalid Bearer JWT token provided" });
+            .json({ unauthenticated: "Invalid Bearer JWT token provided" });
     }
 
     const openidConfiguration = await fetch(`${KEYCLOAK_URL}/.well-known/openid-configuration`);
