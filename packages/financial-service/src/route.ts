@@ -79,6 +79,8 @@ router.get(
  * @openapi
  * /balance/{user_id}:
  *   post:
+ *     security:
+ *       - keycloak: []
  *     tags:
  *       - transference
  *     summary: Place a deposit / creates a credit transference
@@ -129,7 +131,10 @@ router.get(
  *             schema:
  *               oneOf:
  *                 - $ref: '#/components/schemas/ValidationError'
- *                 - $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         $ref: '#/components/responses/UnauthenticatedError'
+ *       403:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.post(
     "/balance/:recipient_id",

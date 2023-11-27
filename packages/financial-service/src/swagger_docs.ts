@@ -35,6 +35,38 @@ const options: OAS3Options = {
                     bearerFormat: "JWT",
                 },
             },
+            responses: {
+                UnauthorizedError: {
+                    description: "You aren't authorized to perform this action",
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    unauthorized: {
+                                        type: "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                UnauthenticatedError: {
+                    description: "You aren't authenticated, please provide a valid bearer token",
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    unauthenticated: {
+                                        type: "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            },
             schemas: {
                 TransferenceDTO: {
                     type: "object",

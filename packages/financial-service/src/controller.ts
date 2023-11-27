@@ -31,17 +31,19 @@ async function getUserBalance(req: Request, res: Response) {
 }
 
 async function postUserDeposit(req: Request, res: Response) {
-    const { sender_id, recipient_id, amount, receipt, description } = req.data;
-    const isSenderRecipient = sender_id == recipient_id;
+    const { recipient_id, amount, receipt, description } = req.data;
+    const { auth_id } = req.auth;
+
+    const isSenderRecipient = auth_id == recipient_id;
     if(isSenderRecipient) {
-        return res.status(400).json({
-            error: "you can't send a deposit to yourself. Did you mean to post a /purchase?",
+        return res.status(403).json({
+            unauthorized: "you can't send a deposit to yourself. Did you mean to post a /purchase?",
         });
     }
     const placedDeposit = await service.postPendingTransference(
         context,
         amount,
-        sender_id,
+        auth_id,
         receipt,
         recipient_id,
         description,
