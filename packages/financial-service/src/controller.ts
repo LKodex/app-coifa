@@ -138,6 +138,19 @@ async function postUserPurchase(req: Request, res: Response) {
 
 async function getUserTransferenceHistory(req: Request, res: Response) {
     const { user_id, pageNumber, pageSize, orderDateBy: queryOrderBy } = req.data;
+    const { auth_id, email } = req.auth;
+
+    const ADMIN_DOMAIN = process.env.ADMIN_DOMAIN ?? "ufms.br";
+    const isUserAdmin = email.endsWith(`@${ADMIN_DOMAIN}`);
+    const isUserRequester = user_id == auth_id;
+    const isUserAllowed = isUserRequester || isUserAdmin;
+
+    if (!isUserAllowed) {
+        return res.status(403).json({
+            unauthorized: "you aren't allowed to see the history of this user"
+        });
+    }
+
     // Gets only one argument if there's multiple on the query
     const orderDateBy = Array.isArray(queryOrderBy) ? queryOrderBy.shift() : queryOrderBy;
     const resultDto = await service.getUserHistory(
@@ -187,6 +200,20 @@ async function getTransference(req: Request, res: Response) {
         });
     }
     const { id, sender_id, recipient_id, amount, date, kind, description } = transference!;
+    const { auth_id, email } = req.auth;
+
+    const ADMIN_DOMAIN = process.env.ADMIN_DOMAIN ?? "ufms.br";
+    const isUserAdmin = email.endsWith(`@${ADMIN_DOMAIN}`);
+    const isRequesterSender = sender_id == auth_id;
+    const isRequesterRecipiter = recipient_id == auth_id;
+    const isUserAllowed = isRequesterRecipiter || isRequesterSender || isUserAdmin;
+
+    if (!isUserAllowed) {
+        return res.status(403).json({
+            unauthorized: "you aren't allowed to see this transference"
+        });
+    }
+    
     const transferenceDto: TransferenceDTO = {
         id,
         sender_id,

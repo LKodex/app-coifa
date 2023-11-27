@@ -61,6 +61,10 @@ function setBodyFieldAsMulterFilePath(field: string): any {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthenticatedError'
+ *       403:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get(
     "/balance/:user_id",
@@ -138,6 +142,7 @@ router.get(
  */
 router.post(
     "/balance/:recipient_id",
+    authentication,
     upload.single("receipt"),
     setBodyFieldAsMulterFilePath("receipt"),
     validateSchema({
@@ -344,6 +349,8 @@ router.post(
  * @openapi
  * /history/{user_id}:
  *   get:
+ *     security:
+ *       - keycloak: []
  *     tags:
  *       - history
  *     summary: Gets the user transference history
@@ -391,9 +398,14 @@ router.post(
  *               anyOf:
  *                 - $ref: '#/components/schemas/TransferenceDTO'
  *                 - $ref: '#/components/schemas/ReviewedTransferenceDTO'
+ *       401:
+ *         $ref: '#/components/responses/UnauthenticatedError'
+ *       403:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get(
     "/history/:user_id",
+    authentication,
     validateSchema({
         user_id: {
             isUUID: true,
@@ -440,6 +452,8 @@ router.get(
  * @openapi
  * /transference/{transference_id}:
  *   get:
+ *     security:
+ *       - keycloak: []
  *     tags:
  *       - history
  *     summary: Gets a transference
@@ -477,6 +491,7 @@ router.get(
  */
 router.get(
     "/transference/:transference_id",
+    authentication,
     validateSchema({
         transference_id: {
             isUUID: true,
